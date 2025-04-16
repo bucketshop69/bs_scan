@@ -1,26 +1,194 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-white text-gray-900;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  @apply transition-colors duration-200 ease-in-out;
+}
+
+body.dark {
+  @apply bg-bio-base text-bio-text-primary;
+}
+
+.root-container {
+  @apply w-[90%] max-w-[1400px] mx-auto py-4;
+}
+
+/* Add some base styling for common elements in dark mode */
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
+  @apply text-bio-text-primary;
+}
+
+.dark p,
+.dark span,
+.dark div {
+  @apply text-bio-text-secondary;
+}
+
+.dark button,
+.dark a {
+  @apply text-bio-primary hover:text-opacity-80 transition-colors;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  @apply bg-bio-surface border-bio-border text-bio-text-primary;
+}
+
+.dark hr {
+  @apply border-bio-border;
+}
+
+/* Hand-drawn border styles */
+.hand-drawn {
+  position: relative;
+  border: none;
+  padding: 8px;
+  margin: 6px;
+}
+
+.hand-drawn::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  z-index: -1;
+  border-radius: 8px;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 100 100' fill='none'%3E%3Cpath d='M2,29 Q8,22 12,24 Q18,29 26,25 Q36,18 40,26 Q44,32 53,29 Q61,24 67,29 Q76,35 82,28 Q87,22 95,29 Q98,34 99,45 Q97,55 99,65 Q97,75 98,85 Q95,93 88,97 Q80,96 72,97 Q63,95 55,97 Q45,96 37,97 Q26,95 18,97 Q10,95 4,96 Q1,90 2,83 Q4,74 2,65 Q5,56 2,49 Q4,40 2,29Z' stroke='%231d595e' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.dark .hand-drawn::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 100 100' fill='none'%3E%3Cpath d='M2,29 Q8,22 12,24 Q18,29 26,25 Q36,18 40,26 Q44,32 53,29 Q61,24 67,29 Q76,35 82,28 Q87,22 95,29 Q98,34 99,45 Q97,55 99,65 Q97,75 98,85 Q95,93 88,97 Q80,96 72,97 Q63,95 55,97 Q45,96 37,97 Q26,95 18,97 Q10,95 4,96 Q1,90 2,83 Q4,74 2,65 Q5,56 2,49 Q4,40 2,29Z' stroke='%2333ffbb' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+}
+
+.hand-drawn-button {
+  position: relative;
+  border: none;
+  padding: 8px 16px;
+  margin: 4px;
+  background-color: #33ffbb;
+  color: #031a1f;
+  transition: transform 0.2s;
+}
+
+.hand-drawn-button::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  z-index: -1;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 100 100' fill='none'%3E%3Cpath d='M7,25 Q15,18 22,21 Q36,27 50,22 Q65,17 78,23 Q90,28 95,36 Q98,46 95,55 Q90,65 93,75 Q90,85 82,90 Q70,93 58,90 Q46,93 35,90 Q22,93 12,88 Q5,80 7,68 Q11,55 7,45 Q10,33 7,25Z' stroke='%231d595e' fill='%2333ffbb' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.hand-drawn-button:hover {
+  transform: scale(1.03);
+}
+
+.hand-drawn-button:active {
+  transform: scale(0.98);
+}
+
+.hand-drawn-tabs {
+  display: flex;
+  position: relative;
+  border: none;
+  padding: 0;
+  margin: 6px;
+}
+
+.hand-drawn-tabs::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  z-index: -1;
+  border-radius: 4px;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 100 100' fill='none'%3E%3Cpath d='M2,30 Q18,25 35,28 Q52,25 70,28 Q85,25 98,30 Q97,42 98,55 Q97,70 98,85 Q85,90 70,87 Q52,90 35,87 Q18,90 2,85 Q3,70 2,55 Q3,42 2,30Z' stroke='%231d595e' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3Cpath d='M50,28 Q48,45 50,55 Q49,70 50,88' stroke='%231d595e' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.dark .hand-drawn-tabs::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 100 100' fill='none'%3E%3Cpath d='M2,30 Q18,25 35,28 Q52,25 70,28 Q85,25 98,30 Q97,42 98,55 Q97,70 98,85 Q85,90 70,87 Q52,90 35,87 Q18,90 2,85 Q3,70 2,55 Q3,42 2,30Z' stroke='%2333ffbb' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3Cpath d='M50,28 Q48,45 50,55 Q49,70 50,88' stroke='%2333ffbb' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+}
+
+.hand-drawn-input {
+  position: relative;
+  border: none;
+  padding: 10px;
+  margin: 6px;
+  width: calc(100% - 12px);
+}
+
+.hand-drawn-input::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  z-index: -1;
+  border-radius: 6px;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 100 100' fill='none'%3E%3Cpath d='M5,35 Q15,32 30,35 Q45,32 60,35 Q75,32 95,35 Q97,45 95,60 Q97,75 95,85 Q75,88 60,85 Q45,88 30,85 Q15,88 5,85 Q3,75 5,60 Q3,45 5,35Z' stroke='%231d595e' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.dark .hand-drawn-input::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 100 100' fill='none'%3E%3Cpath d='M5,35 Q15,32 30,35 Q45,32 60,35 Q75,32 95,35 Q97,45 95,60 Q97,75 95,85 Q75,88 60,85 Q45,88 30,85 Q15,88 5,85 Q3,75 5,60 Q3,45 5,35Z' stroke='%2333ffbb' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+}
+
+.hand-drawn-container {
+  position: relative;
+  border: none;
+  padding: 16px;
+  margin: 10px;
+}
+
+.hand-drawn-container::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  right: -10px;
+  bottom: -10px;
+  z-index: -1;
+  border-radius: 12px;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 100 100' fill='none'%3E%3Cpath d='M1,15 Q10,8 20,12 Q30,8 40,12 Q50,8 60,12 Q70,8 80,12 Q90,8 99,15 Q92,25 99,35 Q92,45 99,55 Q92,65 99,75 Q92,85 99,95 Q90,98 80,95 Q70,98 60,95 Q50,98 40,95 Q30,98 20,95 Q10,98 1,95 Q8,85 1,75 Q8,65 1,55 Q8,45 1,35 Q8,25 1,15Z' stroke='%231d595e' stroke-width='3' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.dark .hand-drawn-container::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 100 100' fill='none'%3E%3Cpath d='M1,15 Q10,8 20,12 Q30,8 40,12 Q50,8 60,12 Q70,8 80,12 Q90,8 99,15 Q92,25 99,35 Q92,45 99,55 Q92,65 99,75 Q92,85 99,95 Q90,98 80,95 Q70,98 60,95 Q50,98 40,95 Q30,98 20,95 Q10,98 1,95 Q8,85 1,75 Q8,65 1,55 Q8,45 1,35 Q8,25 1,15Z' stroke='%2333ffbb' stroke-width='3' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
 }
