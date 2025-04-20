@@ -1,75 +1,114 @@
-import Image from "next/image";
+import LatestTx from "./components/LatestTx";
+import MenuButton from "./components/MenuButton";
 
 export default function Home() {
   return (
     <div className="bg-bio-base min-h-screen w-full flex justify-center">
-      <div className="root-container">
+      <div className="root-container flex flex-col h-screen w-full">
         {/* Search Bar */}
         <div className="my-8 relative">
           <input
             type="text"
-            placeholder="Universal Search"
+            placeholder="Know details of Tx, Token, Account, program, etc."
             className="w-full p-4 bg-bio-surface text-bio-text-primary focus:outline-none border-2 border-bio-border rounded-lg"
           />
         </div>
 
         {/* Two Column Layout */}
-        <div className="flex flex-col lg:flex-row gap-5">
-          {/* Left Panel - 30% */}
-          <div className="w-full lg:w-[30%] bg-bio-surface p-5 border-2 border-bio-border rounded-lg">
-            <h2 className="text-xl font-semibold mb-4 text-bio-primary">Left Panel (30%)</h2>
-
-            <div className="bg-bio-surface p-4 border border-bio-border rounded-md">
-              <h3 className="text-lg font-medium mb-3 text-bio-secondary">Navigation</h3>
-
-              <ul className="list-disc pl-5 space-y-2">
-                <li>
-                  <a href="#" className="text-bio-primary hover:text-opacity-80 transition-colors">Dashboard</a>
-                </li>
-                <li>
-                  <a href="#" className="text-bio-primary hover:text-opacity-80 transition-colors">Search</a>
-                </li>
-                <li>
-                  <a href="#" className="text-bio-primary hover:text-opacity-80 transition-colors">Reports</a>
-                </li>
-                <li>
-                  <a href="#" className="text-bio-primary hover:text-opacity-80 transition-colors">Settings</a>
-                </li>
-              </ul>
+        <div className="flex flex-col lg:flex-row gap-5 flex-grow overflow-auto min-h-0">
+          {/* Left Panel - Latest Transactions Component */}
+          <div className="w-full lg:w-[30%] flex flex-col bg-bio-surface p-3 border-2 border-bio-border rounded-lg">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-lg font-bold">All Solana Activity</h2>
+              <MenuButton>
+                <div className="p-3">
+                  <div className="flex items-center">
+                    <span className="text-sm">Network Status</span>
+                  </div>
+                </div>
+              </MenuButton>
+            </div>
+            <div className="flex-grow min-h-0">
+              <LatestTx hideHeader={true} className="border-0" customAccount="" />
             </div>
           </div>
 
           {/* Right Panel - 70% */}
-          <div className="w-full lg:w-[70%] bg-bio-surface p-5 border-2 border-bio-border rounded-lg">
-            <h2 className="text-xl font-semibold mb-4 text-bio-primary">Right Panel (70%)</h2>
+          <div className="w-full lg:w-[70%] bg-bio-surface p-3 border-2 border-bio-border rounded-lg flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-bio-primary">Top Defi Protocols</h2>
+              <MenuButton>
+                <div className="p-3">
+                  <div className="flex items-center">
+                    <span className="text-sm">View Options</span>
+                  </div>
+                </div>
+              </MenuButton>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-bio-surface p-4 border border-bio-border rounded-md">
-                <h3 className="text-lg font-medium mb-3 text-bio-secondary">Recent Activity</h3>
-                <p className="text-bio-text-secondary">
-                  View your recent scans and activities here.
-                </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-auto grid-rows-2 auto-rows-fr">
+              <div className="bg-bio-surface p-2 border border-bio-border rounded-md flex flex-col h-full">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-medium text-bio-secondary">PumpFun</h3>
+                  <MenuButton>
+                    <div className="p-3">
+                      <div className="flex items-center">
+                        <span className="text-sm">Protocol Options</span>
+                      </div>
+                    </div>
+                  </MenuButton>
+                </div>
+                <div className="flex-grow min-h-0">
+                  <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" />
+                </div>
               </div>
 
-              <div className="bg-bio-surface p-4 border border-bio-border rounded-md">
-                <h3 className="text-lg font-medium mb-3 text-bio-secondary">Statistics</h3>
-                <p className="text-bio-text-secondary">
-                  View your performance metrics and statistics.
-                </p>
+              <div className="bg-bio-surface p-2 border border-bio-border rounded-md flex flex-col h-full">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-medium text-bio-secondary">Jupiter</h3>
+                  <MenuButton>
+                    <div className="p-3">
+                      <div className="flex items-center">
+                        <span className="text-sm">Protocol Options</span>
+                      </div>
+                    </div>
+                  </MenuButton>
+                </div>
+                <div className="flex-grow min-h-0">
+                  <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" />
+                </div>
               </div>
 
-              <div className="bg-bio-surface p-4 border border-bio-border rounded-md">
-                <h3 className="text-lg font-medium mb-3 text-bio-secondary">Alerts</h3>
-                <p className="text-bio-text-secondary">
-                  Important notifications and alerts.
-                </p>
+              <div className="bg-bio-surface p-2 border border-bio-border rounded-md flex flex-col h-full">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-medium text-bio-secondary">Raydium</h3>
+                  <MenuButton>
+                    <div className="p-3">
+                      <div className="flex items-center">
+                        <span className="text-sm">Protocol Options</span>
+                      </div>
+                    </div>
+                  </MenuButton>
+                </div>
+                <div className="flex-grow min-h-0">
+                  <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" />
+                </div>
               </div>
 
-              <div className="bg-bio-surface p-4 border border-bio-border rounded-md">
-                <h3 className="text-lg font-medium mb-3 text-bio-secondary">Quick Actions</h3>
-                <button className="bg-bio-primary px-4 py-2 rounded-md text-bio-base font-medium hover:bg-opacity-90 transition-colors">
-                  New Scan
-                </button>
+              <div className="bg-bio-surface p-2 border border-bio-border rounded-md flex flex-col h-full">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-medium text-bio-secondary">Meteora</h3>
+                  <MenuButton>
+                    <div className="p-3">
+                      <div className="flex items-center">
+                        <span className="text-sm">Protocol Options</span>
+                      </div>
+                    </div>
+                  </MenuButton>
+                </div>
+                <div className="flex-grow min-h-0">
+                  <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" />
+                </div>
               </div>
             </div>
           </div>
