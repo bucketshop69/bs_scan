@@ -149,20 +149,22 @@ export default function AddressDetails() {
                     { programId: TOKEN_PROGRAM_ID }
                 );
 
-                // Process token accounts
-                const processedTokenBalances: TokenBalanceInfo[] = tokenAccountsResponse.value.map((account: ParsedTokenAccount) => {
-                    const parsedInfo = account.account.data.parsed.info;
-                    const mintAddress = parsedInfo.mint;
-                    const tokenAmount = parsedInfo.tokenAmount;
+                // Process token accounts and filter out zero balances
+                const processedTokenBalances: TokenBalanceInfo[] = tokenAccountsResponse.value
+                    .map((account: ParsedTokenAccount) => {
+                        const parsedInfo = account.account.data.parsed.info;
+                        const mintAddress = parsedInfo.mint;
+                        const tokenAmount = parsedInfo.tokenAmount;
 
-                    return {
-                        mint: mintAddress,
-                        symbol: mintAddress.slice(0, 5) + "...", // Placeholder until we implement token list lookup
-                        amount: tokenAmount.amount,
-                        decimals: tokenAmount.decimals,
-                        uiAmount: tokenAmount.uiAmount
-                    };
-                });
+                        return {
+                            mint: mintAddress,
+                            symbol: mintAddress.slice(0, 5) + "...", // Placeholder until we implement token list lookup
+                            amount: tokenAmount.amount,
+                            decimals: tokenAmount.decimals,
+                            uiAmount: tokenAmount.uiAmount
+                        };
+                    })
+                    .filter(token => Number(token.amount) > 0); // Filter out zero balances
 
                 setTokenBalances(processedTokenBalances);
 
