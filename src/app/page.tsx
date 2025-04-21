@@ -1,18 +1,13 @@
 import LatestTx from "./components/LatestTx";
 import MenuButton from "./components/MenuButton";
+import SearchBar from "./components/SearchBar";
 
 export default function Home() {
   return (
     <div className="bg-bio-base min-h-screen w-full flex justify-center">
       <div className="root-container flex flex-col h-screen w-full">
         {/* Search Bar */}
-        <div className="my-8 relative">
-          <input
-            type="text"
-            placeholder="Know details of Tx, Token, Account, program, etc."
-            className="w-full p-4 bg-bio-surface text-bio-text-primary focus:outline-none border-2 border-bio-border rounded-lg"
-          />
-        </div>
+        <SearchBar />
 
         {/* Two Column Layout */}
         <div className="flex flex-col lg:flex-row gap-5 flex-grow overflow-auto min-h-0">
@@ -29,7 +24,7 @@ export default function Home() {
               </MenuButton>
             </div>
             <div className="flex-grow min-h-0">
-              <LatestTx hideHeader={true} className="border-0" customAccount="" />
+              {/* <LatestTx hideHeader={true} className="border-0" customAccount="" /> */}
             </div>
           </div>
 
@@ -59,7 +54,7 @@ export default function Home() {
                   </MenuButton>
                 </div>
                 <div className="flex-grow min-h-0">
-                  <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" />
+                  {/* <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" /> */}
                 </div>
               </div>
 
@@ -75,7 +70,7 @@ export default function Home() {
                   </MenuButton>
                 </div>
                 <div className="flex-grow min-h-0">
-                  <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" />
+                  {/* <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" /> */}
                 </div>
               </div>
 
@@ -91,7 +86,7 @@ export default function Home() {
                   </MenuButton>
                 </div>
                 <div className="flex-grow min-h-0">
-                  <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" />
+                  {/* <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" /> */}
                 </div>
               </div>
 
@@ -107,7 +102,7 @@ export default function Home() {
                   </MenuButton>
                 </div>
                 <div className="flex-grow min-h-0">
-                  <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" />
+                  {/* <LatestTx isNested={true} hideHeader={true} className="border-0" customAccount="LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" /> */}
                 </div>
               </div>
             </div>
