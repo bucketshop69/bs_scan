@@ -11,7 +11,10 @@ import {
     RpcResponseAndContext,
     ConfirmedSignatureInfo
 } from "@solana/web3.js";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { HeliusParsedTransaction } from "../../types/helius";
+import { fetchAddressTransactions } from "../../api/helius";
+import { SPAM_ADDRESSES } from "../../constants";
 
 // Configure the Solana connection - same endpoint as used in tx details
 const rpcEndpoint = "https://mainnet.helius-rpc.com/?api-key=dbf616dd-1870-4cdb-a0d2-754ae58a64f0";
@@ -92,10 +95,20 @@ export default function AddressDetails() {
     // Phase 2: State variables for data
     const [solBalance, setSolBalance] = useState<number | null>(null);
     const [tokenBalances, setTokenBalances] = useState<TokenBalanceInfo[] | null>(null);
-    const [recentTransactions, setRecentTransactions] = useState<TransactionSignatureInfo[] | null>(null);
+    const [recentTransactions, setRecentTransactions] = useState<HeliusParsedTransaction[]>([]);
     const [accountType, setAccountType] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+
+    // Infinite scroll state
+    const [hasMore, setHasMore] = useState<boolean>(true);
+    const [loadingMore, setLoadingMore] = useState<boolean>(false);
+    const [lastSignature, setLastSignature] = useState<string | null>(null);
+    const observer = useRef<IntersectionObserver | null>(null);
+    const loadingRef = useRef<HTMLDivElement>(null);
+
+    // Add state to track spammed filtered
+    const [spamFiltered, setSpamFiltered] = useState<number>(0);
 
     // Phase 1: Address validation
     useEffect(() => {
@@ -118,6 +131,95 @@ export default function AddressDetails() {
         }
     }, [addressId]);
 
+    // Function to load more transactions
+    const loadMoreTransactions = useCallback(async () => {
+        if (!publicKey || loadingMore || !hasMore) return;
+
+        setLoadingMore(true);
+
+        try {
+            console.log('Loading more transactions after signature:', lastSignature);
+            const { transactions, error: txError } = await fetchAddressTransactions(
+                publicKey.toString(),
+                10,
+                lastSignature || undefined
+            );
+
+            if (txError) {
+                console.error("Error fetching more transactions:", txError);
+                return;
+            }
+
+            if (transactions && transactions.length > 0) {
+                // Filter out any duplicates that might occur due to filtering
+                const newTransactions = transactions.filter(
+                    newTx => !recentTransactions.some(existingTx => existingTx.signature === newTx.signature)
+                );
+
+                if (newTransactions.length === 0) {
+                    // If we got back only duplicates, try loading more with the last signature
+                    console.log('Received only duplicate transactions, trying again with new signature');
+                    if (transactions[transactions.length - 1].signature !== lastSignature) {
+                        setLastSignature(transactions[transactions.length - 1].signature);
+                        setLoadingMore(false);
+                        // We'll try again in the next update cycle through the useEffect
+                        return;
+                    } else {
+                        // If we got the same last signature, we've probably reached the end
+                        setHasMore(false);
+                        return;
+                    }
+                }
+
+                // Add the new transactions
+                setRecentTransactions(prev => [...prev, ...newTransactions]);
+
+                // Update the last signature for the next fetch
+                setLastSignature(transactions[transactions.length - 1].signature);
+
+                // For spam count tracking
+                const estimatedSpamFiltered = Math.max(0, 10 - transactions.length);
+                if (estimatedSpamFiltered > 0) {
+                    setSpamFiltered(prev => prev + estimatedSpamFiltered);
+                }
+
+                // If we're getting fewer transactions back, we might be near the end
+                if (transactions.length < 5) {
+                    setHasMore(false);
+                }
+            } else {
+                setHasMore(false);
+            }
+        } catch (err) {
+            console.error("Error loading more transactions:", err);
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [publicKey, lastSignature, loadingMore, hasMore, recentTransactions]);
+
+    // Set up intersection observer for infinite scroll
+    useEffect(() => {
+        if (loadingMore) return;
+
+        if (observer.current) observer.current.disconnect();
+
+        observer.current = new IntersectionObserver(entries => {
+            if (entries[0].isIntersecting && hasMore) {
+                loadMoreTransactions();
+            }
+        });
+
+        if (loadingRef.current) {
+            observer.current.observe(loadingRef.current);
+        }
+
+        return () => {
+            if (observer.current) {
+                observer.current.disconnect();
+            }
+        };
+    }, [loadMoreTransactions, loadingMore, hasMore]);
+
     // Phase 3: Data Fetching
     useEffect(() => {
         // Only proceed if we have a valid PublicKey
@@ -133,8 +235,10 @@ export default function AddressDetails() {
         setError(null);
         setSolBalance(null);
         setTokenBalances(null);
-        setRecentTransactions(null);
+        setRecentTransactions([]);
         setAccountType(null);
+        setLastSignature(null);
+        setHasMore(true);
 
         async function fetchAddressData() {
             try {
@@ -168,9 +272,24 @@ export default function AddressDetails() {
 
                 setTokenBalances(processedTokenBalances);
 
-                // 3. Fetch recent transactions
-                const signatures = await connection.getSignaturesForAddress(validPublicKey, { limit: 10 });
-                setRecentTransactions(signatures as unknown as TransactionSignatureInfo[]);
+                // 3. Fetch recent transactions using Helius API
+                const { transactions, error: txError } = await fetchAddressTransactions(validPublicKey.toString(), 10);
+
+                if (txError) {
+                    console.error("Error fetching transactions:", txError);
+                    throw new Error(txError);
+                }
+
+                if (transactions && transactions.length > 0) {
+                    setRecentTransactions(transactions);
+                    setLastSignature(transactions[transactions.length - 1].signature);
+
+                    // Estimate spam filtered (this is approximate)
+                    setSpamFiltered(5 - Math.max(0, 10 - transactions.length));
+                } else {
+                    setRecentTransactions([]);
+                    setHasMore(false);
+                }
 
                 // 4. Fetch account info to determine type
                 const accountInfo = await connection.getAccountInfo(validPublicKey);
@@ -272,7 +391,11 @@ export default function AddressDetails() {
                                 <div className="flex flex-col sm:flex-row sm:items-center border-b border-bio-border pb-3">
                                     <span className="text-bio-text-secondary font-medium w-40">Transactions:</span>
                                     <span className="text-bio-text-primary">
-                                        {recentTransactions ? `${recentTransactions.length}+ transactions` : "Loading..."}
+                                        {recentTransactions ? (
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                {recentTransactions.length}+
+                                            </span>
+                                        ) : "Loading..."}
                                     </span>
                                 </div>
                             </div>
@@ -313,47 +436,87 @@ export default function AddressDetails() {
                             </div>
 
                             <div className="mt-8">
-                                <h2 className="text-xl font-semibold mb-4 text-bio-primary">Recent Transactions</h2>
+                                <h2 className="text-xl font-semibold mb-4 text-bio-primary flex items-center">
+                                    Recent Transactions
+                                    <span className="ml-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded">Parsed</span>
+                                    {spamFiltered > 0 && (
+                                        <span className="ml-2 px-2 py-1 text-xs bg-amber-100 text-amber-800 rounded flex items-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                            </svg>
+                                            {spamFiltered} spam filtered
+                                        </span>
+                                    )}
+                                </h2>
                                 {recentTransactions && recentTransactions.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-bio-border">
-                                            <thead className="bg-bio-base">
-                                                <tr>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Signature</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Block</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Age</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="bg-bio-surface divide-y divide-bio-border">
-                                                {recentTransactions.map((tx, index) => (
-                                                    <tr key={index}>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-primary">
-                                                            <Link
-                                                                href={`/tx/${tx.signature}`}
-                                                                className="hover:underline"
-                                                            >
-                                                                {tx.signature.slice(0, 8)}...{tx.signature.slice(-8)}
-                                                            </Link>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
-                                                            {tx.slot.toLocaleString()}
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
-                                                            {tx.blockTime ? formatTimeAgo(tx.blockTime) : "Unknown"}
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                            <span className={`inline-block px-2 py-1 ${tx.err ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'} rounded`}>
-                                                                {tx.err ? "Failed" : "Success"}
-                                                            </span>
-                                                        </td>
+                                    <div className="border border-bio-border rounded-lg">
+                                        <div className="max-h-[500px] overflow-y-auto overflow-x-auto custom-scrollbar">
+                                            <table className="min-w-full divide-y divide-bio-border">
+                                                <thead className="bg-bio-base sticky top-0 z-10">
+                                                    <tr>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Type</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Signature</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Block</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Age</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Status</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody className="bg-bio-surface divide-y divide-bio-border">
+                                                    {recentTransactions.map((tx, index) => (
+                                                        <tr key={tx.signature}>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-medium">{tx.type || "Unknown"}</span>
+                                                                    <span className="text-xs text-bio-text-secondary truncate max-w-[200px]">
+                                                                        {tx.description || tx.source || "-"}
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-primary">
+                                                                <Link
+                                                                    href={`/tx/${tx.signature}`}
+                                                                    className="hover:underline"
+                                                                >
+                                                                    {tx.signature.slice(0, 8)}...{tx.signature.slice(-8)}
+                                                                </Link>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
+                                                                {tx.slot.toLocaleString()}
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
+                                                                {tx.timestamp ? formatTimeAgo(tx.timestamp) : "Unknown"}
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                                <span className={`inline-block px-2 py-1 ${tx.transactionError
+                                                                    ? 'bg-red-100 text-red-800' : 'text-bio-primary font-medium'} rounded`}>
+                                                                    {tx.transactionError ? "Failed" : "Success"}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+
+                                            {/* Loading indicator for infinite scroll */}
+                                            {hasMore && (
+                                                <div
+                                                    ref={loadingRef}
+                                                    className="py-4 flex justify-center"
+                                                >
+                                                    {loadingMore ? (
+                                                        <div className="animate-pulse flex items-center">
+                                                            <div className="h-4 w-4 rounded-full bg-bio-primary/30 mr-2"></div>
+                                                            <p className="text-sm text-bio-text-secondary">Loading more transactions...</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="h-4"></div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 ) : (
-                                    <p className="text-bio-text-secondary">No transactions found.</p>
+                                    <p className="text-bio-text-secondary">No recent transactions found.</p>
                                 )}
                             </div>
                         </>
