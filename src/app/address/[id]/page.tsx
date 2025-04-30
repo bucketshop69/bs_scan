@@ -9,12 +9,18 @@ import {
     AccountInfo,
     ParsedAccountData,
     RpcResponseAndContext,
-    ConfirmedSignatureInfo
 } from "@solana/web3.js";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { HeliusParsedTransaction } from "../../types/helius";
-import { fetchAddressTransactions } from "../../api/helius";
+import { useState, useEffect, useRef } from "react";
+import { fetchAddressTransactions, FundingSource } from "../../api/helius";
 import { SPAM_ADDRESSES } from "../../constants";
+import { TOKEN_MINTS, getTokenSymbol } from "../../utils/tokenMapping";
+import ConsoleMonitor from "../../components/ConsoleMonitor";
+import { TimelineData } from "@/utils/timeline/types";
+import { processTransactions, prepareActivityData, ActivityData, HeatmapValue } from "@/utils/timeline/processors";
+import TimelineView from "@/components/timeline/TimelineView";
+import { HeliusParsedTransaction } from "@/types/helius";
+import ActivityCalendar from '@/components/timeline/ActivityCalendar';
+
 
 // Configure the Solana connection - same endpoint as used in tx details
 const rpcEndpoint = "https://mainnet.helius-rpc.com/?api-key=dbf616dd-1870-4cdb-a0d2-754ae58a64f0";
@@ -100,15 +106,23 @@ export default function AddressDetails() {
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
+    // State for funding sources with pagination
+    const [fundingSources, setFundingSources] = useState<FundingSource[]>([]);
+    const [loadingFundingSources, setLoadingFundingSources] = useState<boolean>(false);
+
     // Infinite scroll state
     const [hasMore, setHasMore] = useState<boolean>(true);
-    const [loadingMore, setLoadingMore] = useState<boolean>(false);
     const [lastSignature, setLastSignature] = useState<string | null>(null);
-    const observer = useRef<IntersectionObserver | null>(null);
-    const loadingRef = useRef<HTMLDivElement>(null);
 
     // Add state to track spammed filtered
     const [spamFiltered, setSpamFiltered] = useState<number>(0);
+
+    // Add new state for timeline data
+    const [timelineData, setTimelineData] = useState<TimelineData | null>(null);
+    // Add state for activity calendar data
+    const [activityData, setActivityData] = useState<HeatmapValue[] | null>(null);
+    const [isLoadingMoreTx, setIsLoadingMoreTx] = useState<boolean>(false);
+    const fetchedSignatures = useRef<Set<string>>(new Set());
 
     // Phase 1: Address validation
     useEffect(() => {
@@ -126,111 +140,20 @@ export default function AddressDetails() {
             const pubKey = new PublicKey(addressId.trim());
             setPublicKey(pubKey);
         } catch (err) {
-            console.error("Error creating PublicKey:", err);
             setAddressError("Invalid address format");
         }
     }, [addressId]);
 
-    // Function to load more transactions
-    const loadMoreTransactions = useCallback(async () => {
-        if (!publicKey || loadingMore || !hasMore) return;
-
-        setLoadingMore(true);
-
-        try {
-            console.log('Loading more transactions after signature:', lastSignature);
-            const { transactions, error: txError } = await fetchAddressTransactions(
-                publicKey.toString(),
-                10,
-                lastSignature || undefined
-            );
-
-            if (txError) {
-                console.error("Error fetching more transactions:", txError);
-                return;
-            }
-
-            if (transactions && transactions.length > 0) {
-                // Filter out any duplicates that might occur due to filtering
-                const newTransactions = transactions.filter(
-                    newTx => !recentTransactions.some(existingTx => existingTx.signature === newTx.signature)
-                );
-
-                if (newTransactions.length === 0) {
-                    // If we got back only duplicates, try loading more with the last signature
-                    console.log('Received only duplicate transactions, trying again with new signature');
-                    if (transactions[transactions.length - 1].signature !== lastSignature) {
-                        setLastSignature(transactions[transactions.length - 1].signature);
-                        setLoadingMore(false);
-                        // We'll try again in the next update cycle through the useEffect
-                        return;
-                    } else {
-                        // If we got the same last signature, we've probably reached the end
-                        setHasMore(false);
-                        return;
-                    }
-                }
-
-                // Add the new transactions
-                setRecentTransactions(prev => [...prev, ...newTransactions]);
-
-                // Update the last signature for the next fetch
-                setLastSignature(transactions[transactions.length - 1].signature);
-
-                // For spam count tracking
-                const estimatedSpamFiltered = Math.max(0, 10 - transactions.length);
-                if (estimatedSpamFiltered > 0) {
-                    setSpamFiltered(prev => prev + estimatedSpamFiltered);
-                }
-
-                // If we're getting fewer transactions back, we might be near the end
-                if (transactions.length < 5) {
-                    setHasMore(false);
-                }
-            } else {
-                setHasMore(false);
-            }
-        } catch (err) {
-            console.error("Error loading more transactions:", err);
-        } finally {
-            setLoadingMore(false);
-        }
-    }, [publicKey, lastSignature, loadingMore, hasMore, recentTransactions]);
-
-    // Set up intersection observer for infinite scroll
+    // Phase 3: Data Fetching and Background Fetch
     useEffect(() => {
-        if (loadingMore) return;
-
-        if (observer.current) observer.current.disconnect();
-
-        observer.current = new IntersectionObserver(entries => {
-            if (entries[0].isIntersecting && hasMore) {
-                loadMoreTransactions();
-            }
-        });
-
-        if (loadingRef.current) {
-            observer.current.observe(loadingRef.current);
-        }
-
-        return () => {
-            if (observer.current) {
-                observer.current.disconnect();
-            }
-        };
-    }, [loadMoreTransactions, loadingMore, hasMore]);
-
-    // Phase 3: Data Fetching
-    useEffect(() => {
-        // Only proceed if we have a valid PublicKey
         if (!publicKey) {
             return;
         }
 
-        // Clone publicKey to a non-null variable to satisfy TypeScript
         const validPublicKey = publicKey;
+        let isMounted = true; // Track component mount status
 
-        // Reset states at the beginning of the fetch
+        // Reset states
         setIsLoading(true);
         setError(null);
         setSolBalance(null);
@@ -238,68 +161,57 @@ export default function AddressDetails() {
         setRecentTransactions([]);
         setAccountType(null);
         setLastSignature(null);
+        // Keep hasMore = true initially for background fetch
         setHasMore(true);
+        setFundingSources([]);
+        setTimelineData(null);
+        setActivityData(null);
+        fetchedSignatures.current.clear(); // Clear fetched signatures on new address
+        setIsLoadingMoreTx(false); // Reset background loading state
 
-        async function fetchAddressData() {
+        async function fetchInitialData() {
             try {
-                // Execute each promise separately with proper typing
-                // 1. Fetch SOL balance
-                const balance = await connection.getBalance(validPublicKey);
-                setSolBalance(balance);
-
-                // 2. Fetch token accounts and balances
-                const tokenAccountsResponse = await connection.getParsedTokenAccountsByOwner(
+                // Initial fetch for balance, tokens, first 50 txs
+                const balancePromise = connection.getBalance(validPublicKey);
+                const tokenAccountsPromise = connection.getParsedTokenAccountsByOwner(
                     validPublicKey,
                     { programId: TOKEN_PROGRAM_ID }
                 );
+                const transactionsPromise = fetchAddressTransactions(validPublicKey.toString(), 50);
+                const accountInfoPromise = connection.getAccountInfo(validPublicKey);
+                // Fetch funding sources later if needed, or integrate into main tx processing
 
-                // Process token accounts and filter out zero balances
-                const processedTokenBalances: TokenBalanceInfo[] = tokenAccountsResponse.value
-                    .map((account: ParsedTokenAccount) => {
-                        const parsedInfo = account.account.data.parsed.info;
-                        const mintAddress = parsedInfo.mint;
-                        const tokenAmount = parsedInfo.tokenAmount;
+                const [balance, tokenAccountsResponse, { transactions, error: txError }, accountInfo] = await Promise.all([
+                    balancePromise,
+                    tokenAccountsPromise,
+                    transactionsPromise,
+                    accountInfoPromise
+                ]);
 
-                        return {
-                            mint: mintAddress,
-                            symbol: mintAddress.slice(0, 5) + "...", // Placeholder until we implement token list lookup
-                            amount: tokenAmount.amount,
-                            decimals: tokenAmount.decimals,
-                            uiAmount: tokenAmount.uiAmount
-                        };
-                    })
-                    .filter(token => Number(token.amount) > 0); // Filter out zero balances
+                if (!isMounted) return; // Don't update state if component unmounted
 
+                setSolBalance(balance);
+
+                // Process tokens
+                const processedTokenBalances = tokenAccountsResponse.value.map((account: ParsedTokenAccount) => {
+                    const parsedInfo = account.account.data.parsed.info;
+                    const mintAddress = parsedInfo.mint;
+                    const tokenAmount = parsedInfo.tokenAmount;
+
+                    return {
+                        mint: mintAddress,
+                        symbol: mintAddress.slice(0, 5) + "...", // Placeholder until we implement token list lookup
+                        amount: tokenAmount.amount,
+                        decimals: tokenAmount.decimals,
+                        uiAmount: tokenAmount.uiAmount
+                    };
+                }).filter(token => Number(token.amount) > 0); // Filter out zero balances
                 setTokenBalances(processedTokenBalances);
 
-                // 3. Fetch recent transactions using Helius API
-                const { transactions, error: txError } = await fetchAddressTransactions(validPublicKey.toString(), 10);
-
-                if (txError) {
-                    console.error("Error fetching transactions:", txError);
-                    throw new Error(txError);
-                }
-
-                if (transactions && transactions.length > 0) {
-                    setRecentTransactions(transactions);
-                    setLastSignature(transactions[transactions.length - 1].signature);
-
-                    // Estimate spam filtered (this is approximate)
-                    setSpamFiltered(5 - Math.max(0, 10 - transactions.length));
-                } else {
-                    setRecentTransactions([]);
-                    setHasMore(false);
-                }
-
-                // 4. Fetch account info to determine type
-                const accountInfo = await connection.getAccountInfo(validPublicKey);
-
-                // Determine account type
+                // Process account type
                 if (accountInfo) {
                     if (accountInfo.executable) {
                         setAccountType("Program Account");
-                    } else if (accountInfo.owner.equals(TOKEN_PROGRAM_ID)) {
-                        setAccountType("Token Account");
                     } else {
                         setAccountType("Wallet");
                     }
@@ -307,18 +219,136 @@ export default function AddressDetails() {
                     setAccountType("Unknown");
                 }
 
-            } catch (err) {
-                console.error("Error fetching address data:", err);
-                setError("Failed to fetch address data. Please try again later.");
+                // Process initial transactions
+                if (txError) {
+                    console.error("Error fetching initial transactions:", txError);
+                    setError("Failed to fetch initial transactions.");
+                    setHasMore(false); // Stop background fetch if initial fails
+                } else if (transactions && transactions.length > 0) {
+                    transactions.forEach(tx => fetchedSignatures.current.add(tx.signature));
+                    setRecentTransactions(transactions);
+                    setLastSignature(transactions[transactions.length - 1].signature);
+
+                    const processedData = processTransactions(transactions, validPublicKey.toString());
+                    setTimelineData(processedData);
+                    setActivityData(prepareActivityData(processedData));
+                    setSpamFiltered(Math.max(0, 50 - transactions.length)); // Approx spam for first batch
+
+                    // If we got less than 50, no need to fetch more
+                    if (transactions.length < 50) {
+                        setHasMore(false);
+                    }
+
+                } else {
+                    setRecentTransactions([]);
+                    setHasMore(false);
+                }
+
+            } catch (err) { // Catch errors from Promise.all or processing
+                console.error("Error during initial data fetch:", err);
+                if (isMounted) {
+                    setError("Failed to fetch initial address data.");
+                    setHasMore(false);
+                }
             } finally {
-                setIsLoading(false);
+                if (isMounted) {
+                    setIsLoading(false); // Stop initial loading indicator
+                }
             }
         }
 
-        // Execute the data fetching function
-        fetchAddressData();
+        async function fetchRemainingDataInBackground(initialLastSig: string | null) {
+            if (!isMounted || !hasMore || !initialLastSig) {
+                if (isMounted) setIsLoadingMoreTx(false);
+                return;
+            }
 
-    }, [publicKey]); // Re-run when publicKey changes
+            setIsLoadingMoreTx(true);
+            let currentLastSig = initialLastSig;
+            let accumulatedTransactions: HeliusParsedTransaction[] = [];
+            let remainingToFetch = 150;
+            let attempts = 0;
+            const maxAttempts = 4; // Limit attempts to prevent infinite loops
+
+            while (remainingToFetch > 0 && attempts < maxAttempts && isMounted) {
+                attempts++;
+                try {
+                    const fetchBatchSize = Math.min(remainingToFetch, 50); // Fetch in batches of 50
+                    const { transactions: batch, error: batchError } = await fetchAddressTransactions(
+                        validPublicKey.toString(),
+                        fetchBatchSize, // Fetch limit for this batch
+                        currentLastSig
+                    );
+
+                    if (!isMounted) break; // Exit if unmounted during fetch
+
+                    if (batchError) {
+                        console.error(`Background fetch error (Attempt ${attempts}):`, batchError);
+                        // Decide if error is fatal or retryable? For now, stop.
+                        break;
+                    }
+
+                    if (batch && batch.length > 0) {
+                        const newUniqueTxs = batch.filter(tx => !fetchedSignatures.current.has(tx.signature));
+                        newUniqueTxs.forEach(tx => fetchedSignatures.current.add(tx.signature));
+                        accumulatedTransactions = [...accumulatedTransactions, ...newUniqueTxs];
+                        remainingToFetch -= newUniqueTxs.length;
+                        currentLastSig = batch[batch.length - 1].signature;
+
+                        // If we received fewer than requested, assume end of history
+                        if (batch.length < fetchBatchSize) {
+                            break;
+                        }
+                    } else {
+                        // No more transactions found
+                        break;
+                    }
+                } catch (err) {
+                    console.error(`Error during background fetch loop (Attempt ${attempts}):`, err);
+                    // Stop background fetch on error
+                    break;
+                }
+            }
+
+            if (!isMounted) return;
+
+            if (accumulatedTransactions.length > 0) {
+                // Combine with existing and re-process
+                setRecentTransactions(prev => {
+                    const combined = [...prev, ...accumulatedTransactions];
+                    // Sort just in case, though should be mostly chronological
+                    combined.sort((a, b) => b.timestamp - a.timestamp);
+
+                    // Update timeline and activity data based on combined list
+                    const processedData = processTransactions(combined, validPublicKey.toString());
+                    setTimelineData(processedData);
+                    setActivityData(prepareActivityData(processedData));
+
+                    return combined;
+                });
+                // Update spam count based on total fetched (approx)
+                setSpamFiltered(prev => prev + Math.max(0, 150 - accumulatedTransactions.length));
+            }
+
+            setIsLoadingMoreTx(false); // Done loading background
+            setHasMore(false); // Assume we fetched all needed or reached end
+        }
+
+        // Start initial fetch
+        fetchInitialData().then(() => {
+            // Once initial data is processed, start background fetch if needed
+            if (isMounted && hasMore && lastSignature) {
+                // Use a small delay to allow initial render to complete
+                setTimeout(() => fetchRemainingDataInBackground(lastSignature), 500);
+            }
+        });
+
+        // Cleanup function
+        return () => {
+            isMounted = false;
+        };
+
+    }, [publicKey]); // Rerun only when publicKey changes
 
     return (
         <div className="bg-bio-base min-h-screen w-full flex justify-center p-4">
@@ -392,13 +422,29 @@ export default function AddressDetails() {
                                     <span className="text-bio-text-secondary font-medium w-40">Transactions:</span>
                                     <span className="text-bio-text-primary">
                                         {recentTransactions ? (
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                {recentTransactions.length}+
+                                            <span className="inline-flex items-center">
+                                                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                    {recentTransactions.length}
+                                                </span>
+                                                {isLoadingMoreTx && (
+                                                    <span className="ml-2 inline-flex items-center text-xs text-bio-text-secondary">
+                                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-bio-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                        Loading more transactions...
+                                                    </span>
+                                                )}
                                             </span>
                                         ) : "Loading..."}
                                     </span>
                                 </div>
                             </div>
+
+                            {/* Add Activity Calendar here */}
+                            {activityData && (
+                                <ActivityCalendar data={activityData} />
+                            )}
 
                             <div className="mt-8">
                                 <h2 className="text-xl font-semibold mb-4 text-bio-primary">Token Balances</h2>
@@ -435,10 +481,117 @@ export default function AddressDetails() {
                                 )}
                             </div>
 
+                            {/* Recent Funding Sources Section - UPDATED */}
                             <div className="mt-8">
                                 <h2 className="text-xl font-semibold mb-4 text-bio-primary flex items-center">
-                                    Recent Transactions
-                                    <span className="ml-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded">Parsed</span>
+                                    Recent Funding Sources
+                                    {fundingSources.length > 0 && (
+                                        <span className="ml-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+                                            {fundingSources.length}
+                                        </span>
+                                    )}
+                                </h2>
+
+                                {loadingFundingSources && fundingSources.length === 0 ? (
+                                    <div className="flex justify-center items-center py-8">
+                                        <div className="animate-pulse flex items-center">
+                                            <div className="h-4 w-4 rounded-full bg-bio-primary/30 mr-2"></div>
+                                            <p className="text-sm text-bio-text-secondary">Loading funding sources...</p>
+                                        </div>
+                                    </div>
+                                ) : fundingSources.length > 0 ? (
+                                    <div className="border border-bio-border rounded-lg overflow-hidden">
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-bio-border">
+                                                <thead className="bg-bio-base sticky top-0 z-10">
+                                                    <tr>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Source</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">SOL Amount</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Token Transfers</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Last Activity</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Recent TX</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-bio-surface divide-y divide-bio-border">
+                                                    {fundingSources.map((source, index) => {
+                                                        // Get most recent transaction 
+                                                        const recentTx = source.transactions.sort((a, b) => b.timestamp - a.timestamp)[0];
+
+                                                        // Get token summary
+                                                        const tokenSummary = Object.entries(source.tokenTransfers);
+
+                                                        return (
+                                                            <tr key={`${source.address}-${index}`}>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-primary">
+                                                                    <Link
+                                                                        href={`/address/${source.address}`}
+                                                                        className="hover:underline"
+                                                                    >
+                                                                        {source.address.slice(0, 8)}...{source.address.slice(-8)}
+                                                                    </Link>
+                                                                </td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
+                                                                    {source.totalSol > 0 ? formatSOL(source.totalSol) : "-"}
+                                                                </td>
+                                                                <td className="px-6 py-4 text-sm text-bio-text-primary">
+                                                                    {tokenSummary.length > 0 ? (
+                                                                        <div className="flex flex-col space-y-1">
+                                                                            {tokenSummary.slice(0, 2).map(([mint, amount]) => (
+                                                                                <div key={mint} className="flex items-center">
+                                                                                    <span className="inline-block px-2 py-0.5 text-xs bg-blue-50 text-blue-700 rounded mr-2">
+                                                                                        {getTokenSymbol(mint)}
+                                                                                    </span>
+                                                                                    <span>
+                                                                                        {formatTokenAmount(
+                                                                                            amount,
+                                                                                            TOKEN_MINTS[mint]?.decimals || 0
+                                                                                        )}
+                                                                                    </span>
+                                                                                </div>
+                                                                            ))}
+                                                                            {tokenSummary.length > 2 && (
+                                                                                <span className="text-xs text-bio-text-secondary">
+                                                                                    +{tokenSummary.length - 2} more
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : "-"}
+                                                                </td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
+                                                                    {formatTimeAgo(source.lastTimestamp)}
+                                                                </td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-primary">
+                                                                    <Link
+                                                                        href={`/tx/${recentTx.signature}`}
+                                                                        className="hover:underline"
+                                                                    >
+                                                                        {recentTx.signature.slice(0, 8)}...
+                                                                    </Link>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-bio-text-secondary">No significant funding sources found in the transaction history.</p>
+                                )}
+                            </div>
+
+                            <div className="mt-8">
+                                <h2 className="text-xl font-semibold mb-4 text-bio-primary flex items-center">
+                                    Transaction Timeline
+                                    {isLoadingMoreTx && (
+                                        <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded flex items-center">
+                                            <svg className="animate-spin -ml-1 mr-2 h-3 w-3 text-bio-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Loading more in background...
+                                        </span>
+                                    )}
                                     {spamFiltered > 0 && (
                                         <span className="ml-2 px-2 py-1 text-xs bg-amber-100 text-amber-800 rounded flex items-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -448,75 +601,15 @@ export default function AddressDetails() {
                                         </span>
                                     )}
                                 </h2>
-                                {recentTransactions && recentTransactions.length > 0 ? (
-                                    <div className="border border-bio-border rounded-lg">
-                                        <div className="max-h-[500px] overflow-y-auto overflow-x-auto custom-scrollbar">
-                                            <table className="min-w-full divide-y divide-bio-border">
-                                                <thead className="bg-bio-base sticky top-0 z-10">
-                                                    <tr>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Type</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Signature</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Block</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Age</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-bio-text-secondary uppercase tracking-wider">Status</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="bg-bio-surface divide-y divide-bio-border">
-                                                    {recentTransactions.map((tx, index) => (
-                                                        <tr key={tx.signature}>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-medium">{tx.type || "Unknown"}</span>
-                                                                    <span className="text-xs text-bio-text-secondary truncate max-w-[200px]">
-                                                                        {tx.description || tx.source || "-"}
-                                                                    </span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-primary">
-                                                                <Link
-                                                                    href={`/tx/${tx.signature}`}
-                                                                    className="hover:underline"
-                                                                >
-                                                                    {tx.signature.slice(0, 8)}...{tx.signature.slice(-8)}
-                                                                </Link>
-                                                            </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
-                                                                {tx.slot.toLocaleString()}
-                                                            </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-bio-text-primary">
-                                                                {tx.timestamp ? formatTimeAgo(tx.timestamp) : "Unknown"}
-                                                            </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                                <span className={`inline-block px-2 py-1 ${tx.transactionError
-                                                                    ? 'bg-red-100 text-red-800' : 'text-bio-primary font-medium'} rounded`}>
-                                                                    {tx.transactionError ? "Failed" : "Success"}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
 
-                                            {/* Loading indicator for infinite scroll */}
-                                            {hasMore && (
-                                                <div
-                                                    ref={loadingRef}
-                                                    className="py-4 flex justify-center"
-                                                >
-                                                    {loadingMore ? (
-                                                        <div className="animate-pulse flex items-center">
-                                                            <div className="h-4 w-4 rounded-full bg-bio-primary/30 mr-2"></div>
-                                                            <p className="text-sm text-bio-text-secondary">Loading more transactions...</p>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="h-4"></div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
+                                {timelineData ? (
+                                    <TimelineView
+                                        data={timelineData}
+                                        isLoading={false}
+                                        error={null}
+                                    />
                                 ) : (
-                                    <p className="text-bio-text-secondary">No recent transactions found.</p>
+                                    <p className="text-bio-text-secondary">No transactions found.</p>
                                 )}
                             </div>
                         </>
