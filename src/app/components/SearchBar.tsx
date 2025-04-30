@@ -6,7 +6,7 @@ import { identifySolanaInput } from "../utils/solana";
 
 export default function SearchBar() {
     const router = useRouter();
-    const [searchInput, setSearchInput] = useState("");
+    const [searchInput, setSearchInput] = useState("7iNJ7CLNT8UBPANxkkrsURjzaktbomCVa93N1sKcVo9C");
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 

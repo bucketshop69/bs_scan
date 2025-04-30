@@ -1,38 +1,93 @@
-# bs_scan
+# Solana Blockchain Explorer
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+A modern web application for exploring the Solana blockchain.
+
+## Features
+
+- Real-time transaction monitoring
+- Account details and token balances
+- Transaction history and analysis
+- Modern UI with theme support
+- Error handling and recovery
+
+## State Management
+
+This project uses Zustand for state management. The state is divided into three main slices:
+
+1. **Transaction Store**: Manages transaction-related state and actions
+2. **Account Store**: Handles account details and token balances
+3. **UI Store**: Controls UI state and theme preferences
+
+For detailed documentation on state management, see [docs/state-management.md](docs/state-management.md).
+
+### Key Features
+
+- Type-safe state management
+- Performance-optimized selectors
+- Batch processing for transactions
+- Error boundaries for graceful error handling
+- Theme support with persistence
 
 ## Getting Started
 
-First, run the development server:
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+2. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Development
+
+### State Management
+
+When working with state:
+
+1. Use the appropriate store slice for your needs
+2. Follow the TypeScript interfaces
+3. Use memoized selectors for performance
+4. Implement error boundaries where needed
+
+Example:
+```typescript
+import { useAccountData, useUIState } from '@/store';
+
+function MyComponent() {
+    const { publicKey, solBalance } = useAccountData();
+    const { theme } = useUIState();
+    // ...
+}
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Error Handling
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Use the error boundary component for graceful error handling:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```typescript
+import ErrorBoundary from '@/components/ErrorBoundary';
 
-## Learn More
+function App() {
+    return (
+        <ErrorBoundary>
+            <YourApp />
+        </ErrorBoundary>
+    );
+}
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Contributing
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## License
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is licensed under the MIT License.
